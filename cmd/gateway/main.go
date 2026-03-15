@@ -32,6 +32,10 @@ func main() {
 
 	r := gin.Default()
 
+	// Security middleware
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORS(cfg.CORSOrigins))
+
 	// Global rate limiter: 100 requests/sec per IP, burst of 100.
 	limiter := middleware.NewRateLimiter(100, 100)
 	r.Use(limiter.Middleware())

@@ -7,6 +7,7 @@ type Config struct {
 	Port               string
 	MatchingEngineAddr string
 	JWTSecret          string
+	CORSOrigins        string
 }
 
 // Load reads configuration from environment variables, falling back to defaults.
@@ -15,6 +16,7 @@ func Load() *Config {
 		Port:               getEnv("PORT", "8080"),
 		MatchingEngineAddr: getEnv("MATCHING_ENGINE_ADDR", "localhost:9090"),
 		JWTSecret:          getEnv("JWT_SECRET", "changeme"),
+		CORSOrigins:        getEnv("CORS_ORIGINS", "*"),
 	}
 }
 
