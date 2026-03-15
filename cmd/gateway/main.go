@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/mantis-exchange/mantis-gateway/internal/config"
+	"github.com/mantis-exchange/mantis-gateway/internal/grpcclient"
 	"github.com/mantis-exchange/mantis-gateway/internal/handler"
 	"github.com/mantis-exchange/mantis-gateway/internal/middleware"
 	"github.com/mantis-exchange/mantis-gateway/internal/ws"
@@ -16,8 +17,18 @@ import (
 func main() {
 	cfg := config.Load()
 
+	// Connect to the matching engine via gRPC.
+	matchingClient, err := grpcclient.New(cfg.MatchingEngineAddr)
+	if err != nil {
+		log.Fatalf("failed to connect to matching engine: %v", err)
+	}
+	defer matchingClient.Close()
+
 	hub := ws.NewHub()
 	go hub.Run()
+
+	orderHandler := handler.NewOrderHandler(matchingClient)
+	marketHandler := handler.NewMarketHandler(matchingClient)
 
 	r := gin.Default()
 
@@ -36,7 +47,7 @@ func main() {
 	// Public API routes (no auth).
 	public := r.Group("/api/v1")
 	{
-		public.GET("/depth/:symbol", handler.GetDepth)
+		public.GET("/depth/:symbol", marketHandler.GetDepth)
 		public.GET("/trades/:symbol", handler.GetTrades)
 	}
 
@@ -44,8 +55,8 @@ func main() {
 	auth := r.Group("/api/v1")
 	auth.Use(middleware.Auth(cfg.JWTSecret))
 	{
-		auth.POST("/orders", handler.PlaceOrder)
-		auth.DELETE("/orders/:id", handler.CancelOrder)
+		auth.POST("/orders", orderHandler.PlaceOrder)
+		auth.DELETE("/orders/:id", orderHandler.CancelOrder)
 		auth.GET("/account", handler.GetAccount)
 		auth.GET("/account/balances", handler.GetBalances)
 	}

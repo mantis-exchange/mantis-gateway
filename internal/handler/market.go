@@ -1,33 +1,67 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/mantis-exchange/mantis-gateway/internal/grpcclient"
+	pb "github.com/mantis-exchange/mantis-gateway/pkg/proto/mantis"
 )
 
+// MarketHandler holds dependencies for market-data HTTP handlers.
+type MarketHandler struct {
+	matching *grpcclient.Client
+}
+
+// NewMarketHandler creates a new MarketHandler backed by the given gRPC client.
+func NewMarketHandler(mc *grpcclient.Client) *MarketHandler {
+	return &MarketHandler{matching: mc}
+}
+
 // GetDepth handles GET /api/v1/depth/:symbol.
-// Placeholder: returns mock order book depth. Will query matching engine via gRPC.
-func GetDepth(c *gin.Context) {
+func (h *MarketHandler) GetDepth(c *gin.Context) {
 	symbol := c.Param("symbol")
 	if symbol == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol is required"})
 		return
 	}
 
-	// TODO: Fetch real depth from matching engine.
+	maxLevels := int32(20) // default
+	if v := c.Query("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil && n > 0 {
+			maxLevels = int32(n)
+		}
+	}
+
+	resp, err := h.matching.GetDepth(c.Request.Context(), &pb.GetDepthRequest{
+		Symbol:    symbol,
+		MaxLevels: maxLevels,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("matching engine error: %v", err)})
+		return
+	}
+
+	depth := resp.GetDepth()
+
+	bids := make([][]string, 0, len(depth.GetBids()))
+	for _, lvl := range depth.GetBids() {
+		bids = append(bids, []string{lvl.GetPrice(), lvl.GetQuantity()})
+	}
+
+	asks := make([][]string, 0, len(depth.GetAsks()))
+	for _, lvl := range depth.GetAsks() {
+		asks = append(asks, []string{lvl.GetPrice(), lvl.GetQuantity()})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"symbol": symbol,
-		"bids": [][]interface{}{
-			{"50000.00", "1.5"},
-			{"49999.00", "2.3"},
-			{"49998.00", "0.8"},
-		},
-		"asks": [][]interface{}{
-			{"50001.00", "1.2"},
-			{"50002.00", "3.1"},
-			{"50003.00", "0.5"},
-		},
+		"symbol": depth.GetSymbol(),
+		"bids":   bids,
+		"asks":   asks,
 	})
 }
 
