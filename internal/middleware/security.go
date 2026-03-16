@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,9 +28,24 @@ func CORS(allowedOrigins string) gin.HandlerFunc {
 			return
 		}
 
-		// In production, validate against allowedOrigins list.
-		// For development, allow the configured origins.
-		c.Header("Access-Control-Allow-Origin", allowedOrigins)
+		// Match request origin against allowed list
+		allowed := false
+		if allowedOrigins == "*" {
+			c.Header("Access-Control-Allow-Origin", "*")
+			allowed = true
+		} else {
+			for _, o := range strings.Split(allowedOrigins, ",") {
+				if strings.TrimSpace(o) == origin {
+					c.Header("Access-Control-Allow-Origin", origin)
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			c.Next()
+			return
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-API-Key")
 		c.Header("Access-Control-Max-Age", "86400")
