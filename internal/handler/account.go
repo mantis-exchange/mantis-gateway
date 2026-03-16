@@ -1,35 +1,78 @@
 package handler
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-// GetAccount handles GET /api/v1/account.
-// Placeholder: returns mock account info. Will query account service.
-func GetAccount(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+// AccountHandler proxies account-related requests to the account service.
+type AccountHandler struct {
+	accountAddr string
+	httpClient  *http.Client
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user_id": userID,
-		"email":   "user@example.com",
-		"status":  "active",
-		"kyc":     "verified",
-	})
+// NewAccountHandler creates a new AccountHandler that proxies to the account service.
+func NewAccountHandler(accountAddr string) *AccountHandler {
+	return &AccountHandler{
+		accountAddr: accountAddr,
+		httpClient:  &http.Client{Timeout: 10 * 1e9}, // 10s
+	}
+}
+
+// Register handles POST /api/v1/account/register.
+func (h *AccountHandler) Register(c *gin.Context) {
+	h.proxy(c, "POST", "/api/v1/account/register")
+}
+
+// Login handles POST /api/v1/account/login.
+func (h *AccountHandler) Login(c *gin.Context) {
+	h.proxy(c, "POST", "/api/v1/account/login")
+}
+
+// GetAccount handles GET /api/v1/account.
+func (h *AccountHandler) GetAccount(c *gin.Context) {
+	h.proxy(c, "GET", "/api/v1/account")
 }
 
 // GetBalances handles GET /api/v1/account/balances.
-// Placeholder: returns mock balances. Will query account service.
-func GetBalances(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+func (h *AccountHandler) GetBalances(c *gin.Context) {
+	h.proxy(c, "GET", "/api/v1/account/balances")
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user_id": userID,
-		"balances": []gin.H{
-			{"asset": "BTC", "free": "1.50000000", "locked": "0.25000000"},
-			{"asset": "USDT", "free": "50000.00", "locked": "10000.00"},
-			{"asset": "ETH", "free": "10.00000000", "locked": "0.00000000"},
-		},
-	})
+// GenerateAPIKeys handles POST /api/v1/account/api-keys.
+func (h *AccountHandler) GenerateAPIKeys(c *gin.Context) {
+	h.proxy(c, "POST", "/api/v1/account/api-keys")
+}
+
+func (h *AccountHandler) proxy(c *gin.Context, method, path string) {
+	url := h.accountAddr + path
+
+	var bodyReader io.Reader
+	if method == "POST" || method == "PUT" {
+		bodyReader = c.Request.Body
+	}
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, url, bodyReader)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to create request"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Forward Authorization header for authenticated endpoints
+	if auth := c.GetHeader("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "account service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", body)
 }

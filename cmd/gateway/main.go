@@ -42,6 +42,7 @@ func main() {
 
 	orderHandler := handler.NewOrderHandler(orderClient)
 	marketHandler := handler.NewMarketHandler(matchingClient, cfg.MarketDataAddr)
+	accountHandler := handler.NewAccountHandler(cfg.AccountServiceAddr)
 
 	r := gin.Default()
 
@@ -72,6 +73,8 @@ func main() {
 	{
 		public.GET("/depth/:symbol", marketHandler.GetDepth)
 		public.GET("/trades/:symbol", marketHandler.GetTrades)
+		public.POST("/account/register", accountHandler.Register)
+		public.POST("/account/login", accountHandler.Login)
 	}
 
 	// Authenticated API routes.
@@ -81,8 +84,9 @@ func main() {
 		auth.POST("/orders", orderHandler.PlaceOrder)
 		auth.DELETE("/orders/:id", orderHandler.CancelOrder)
 		auth.GET("/orders", orderHandler.ListOrders)
-		auth.GET("/account", handler.GetAccount)
-		auth.GET("/account/balances", handler.GetBalances)
+		auth.GET("/account", accountHandler.GetAccount)
+		auth.GET("/account/balances", accountHandler.GetBalances)
+		auth.POST("/account/api-keys", accountHandler.GenerateAPIKeys)
 	}
 
 	srv := &http.Server{
