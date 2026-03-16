@@ -73,6 +73,7 @@ func main() {
 	{
 		public.GET("/depth/:symbol", marketHandler.GetDepth)
 		public.GET("/trades/:symbol", marketHandler.GetTrades)
+		public.GET("/klines", marketHandler.GetKlines)
 		public.POST("/account/register", accountHandler.Register)
 		public.POST("/account/login", accountHandler.Login)
 	}

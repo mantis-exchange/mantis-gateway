@@ -67,6 +67,24 @@ func (h *MarketHandler) GetDepth(c *gin.Context) {
 	})
 }
 
+// GetKlines handles GET /api/v1/klines by proxying to the market-data service.
+func (h *MarketHandler) GetKlines(c *gin.Context) {
+	symbol := c.Query("symbol")
+	interval := c.DefaultQuery("interval", "1m")
+	limit := c.DefaultQuery("limit", "200")
+	url := fmt.Sprintf("%s/api/v1/klines?symbol=%s&interval=%s&limit=%s", h.marketDataAddr, symbol, interval, limit)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "market data service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", body)
+}
+
 // GetTrades handles GET /api/v1/trades/:symbol by proxying to the market-data service.
 func (h *MarketHandler) GetTrades(c *gin.Context) {
 	symbol := c.Param("symbol")
