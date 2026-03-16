@@ -2,11 +2,13 @@ package ws
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,12 +30,12 @@ type SubscribeMessage struct {
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
-
-	mu      sync.Mutex
-	subs    map[string]bool // subscribed channels, keyed by "channel:symbol"
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	mu     sync.Mutex
+	subs   map[string]bool // subscribed channels, keyed by "channel:symbol"
+	userID string          // Set if client authenticated via JWT
 }
 
 // Hub maintains the set of active clients and broadcasts messages to them.
@@ -117,23 +119,51 @@ func (h *Hub) Broadcast(channel, symbol string, data interface{}) {
 }
 
 // HandleWS returns a Gin handler that upgrades HTTP connections to WebSocket.
-func (h *Hub) HandleWS(c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Printf("ws upgrade error: %v", err)
-		return
-	}
+// It accepts an optional JWT token query parameter for authenticating private channels.
+func (h *Hub) HandleWS(jwtSecret string) gin.HandlerFunc {
+	secretBytes := []byte(jwtSecret)
+	return func(c *gin.Context) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("ws upgrade error: %v", err)
+			return
+		}
 
-	client := &Client{
-		hub:  h,
-		conn: conn,
-		send: make(chan []byte, 256),
-		subs: make(map[string]bool),
-	}
-	h.register <- client
+		// Optional JWT auth from query param
+		var userID string
+		if tokenStr := c.Query("token"); tokenStr != "" {
+			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method")
+				}
+				return secretBytes, nil
+			})
+			if err == nil && token.Valid {
+				if claims, ok := token.Claims.(jwt.MapClaims); ok {
+					if sub, ok := claims["sub"].(string); ok {
+						userID = sub
+					}
+				}
+			}
+		}
 
-	go client.writePump()
-	go client.readPump()
+		client := &Client{
+			hub:    h,
+			conn:   conn,
+			send:   make(chan []byte, 256),
+			subs:   make(map[string]bool),
+			userID: userID,
+		}
+		h.register <- client
+
+		go client.writePump()
+		go client.readPump()
+	}
+}
+
+// BroadcastToUser sends a message to a specific user's private channel.
+func (h *Hub) BroadcastToUser(userID string, channel string, data interface{}) {
+	h.Broadcast(channel, userID, data)
 }
 
 // readPump reads messages from the WebSocket connection.
@@ -162,6 +192,24 @@ func (c *Client) readPump() {
 		c.mu.Lock()
 		switch msg.Action {
 		case "subscribe":
+			if msg.Channel == "orders" && c.userID == "" {
+				errMsg, _ := json.Marshal(gin.H{
+					"action":  "subscribe",
+					"channel": msg.Channel,
+					"status":  "error",
+					"error":   "authentication required",
+				})
+				c.mu.Unlock()
+				select {
+				case c.send <- errMsg:
+				default:
+				}
+				continue
+			}
+			// For private channels, use user-specific key
+			if msg.Channel == "orders" {
+				key = "orders:" + c.userID
+			}
 			c.subs[key] = true
 			log.Printf("ws client subscribed to %s", key)
 		case "unsubscribe":

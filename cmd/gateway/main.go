@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,14 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to matching engine: %v", err)
 	}
-	defer matchingClient.Close()
-
 	// Connect to the order service via gRPC.
 	orderClient, err := grpcclient.NewOrderClient(cfg.OrderServiceAddr)
 	if err != nil {
 		log.Fatalf("failed to connect to order service: %v", err)
 	}
-	defer orderClient.Close()
 
 	hub := ws.NewHub()
 	go hub.Run()
@@ -57,8 +58,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// WebSocket endpoint (no auth required for market data).
-	r.GET("/ws", hub.HandleWS)
+	// WebSocket endpoint (no auth required for market data; optional JWT for private channels).
+	r.GET("/ws", hub.HandleWS(cfg.JWTSecret))
 
 	// Public API routes (no auth).
 	public := r.Group("/api/v1")
@@ -73,6 +74,7 @@ func main() {
 	{
 		auth.POST("/orders", orderHandler.PlaceOrder)
 		auth.DELETE("/orders/:id", orderHandler.CancelOrder)
+		auth.GET("/orders", orderHandler.ListOrders)
 		auth.GET("/account", handler.GetAccount)
 		auth.GET("/account/balances", handler.GetBalances)
 	}
@@ -86,7 +88,26 @@ func main() {
 	}
 
 	log.Printf("mantis-gateway starting on :%s (engine: %s, order-service: %s)", cfg.Port, cfg.MatchingEngineAddr, cfg.OrderServiceAddr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
+
+	// Graceful shutdown
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("shutting down gateway...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("server shutdown error: %v", err)
 	}
+
+	matchingClient.Close()
+	orderClient.Close()
+	log.Println("gateway stopped")
 }

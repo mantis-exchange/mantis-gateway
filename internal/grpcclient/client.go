@@ -98,3 +98,8 @@ func (c *OrderClient) PlaceOrder(ctx context.Context, req *pb.PlaceOrderRequest)
 func (c *OrderClient) CancelOrder(ctx context.Context, req *pb.CancelOrderByUserRequest) (*pb.CancelOrderByUserResponse, error) {
 	return c.order.CancelOrder(ctx, req)
 }
+
+// ListOrders retrieves orders for a user from the order service.
+func (c *OrderClient) ListOrders(ctx context.Context, req *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
+	return c.order.ListOrders(ctx, req)
+}

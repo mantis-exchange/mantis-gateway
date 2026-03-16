@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -139,6 +140,48 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		"status":    order.GetStatus().String(),
 		"cancelled": true,
 	})
+}
+
+// ListOrders handles GET /api/v1/orders.
+func (h *OrderHandler) ListOrders(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user_id"})
+		return
+	}
+
+	limit := int32(50)
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = int32(n)
+		}
+	}
+
+	resp, err := h.order.ListOrders(c.Request.Context(), &pb.ListOrdersRequest{
+		UserId: userID,
+		Limit:  limit,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("order service error: %v", err)})
+		return
+	}
+
+	orders := make([]gin.H, 0, len(resp.GetOrders()))
+	for _, o := range resp.GetOrders() {
+		orders = append(orders, gin.H{
+			"id":              o.GetId(),
+			"symbol":          o.GetSymbol(),
+			"side":            o.GetSide().String(),
+			"type":            o.GetOrderType().String(),
+			"price":           o.GetPrice(),
+			"quantity":        o.GetQuantity(),
+			"filled_quantity": o.GetFilledQuantity(),
+			"status":          o.GetStatus().String(),
+			"created_at":      o.GetCreatedAt(),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"orders": orders})
 }
 
 // parseSide converts a string side to the protobuf enum.
