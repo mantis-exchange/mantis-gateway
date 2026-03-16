@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/mantis-exchange/mantis-gateway/internal/config"
+	"github.com/mantis-exchange/mantis-gateway/internal/consumer"
 	"github.com/mantis-exchange/mantis-gateway/internal/grpcclient"
 	"github.com/mantis-exchange/mantis-gateway/internal/handler"
 	"github.com/mantis-exchange/mantis-gateway/internal/middleware"
@@ -33,6 +34,10 @@ func main() {
 
 	hub := ws.NewHub()
 	go hub.Run()
+
+	// Start WebSocket trade consumer for real-time broadcasting.
+	tc := consumer.NewTradeConsumer(hub, matchingClient, cfg.KafkaBrokers)
+	go tc.Start()
 
 	orderHandler := handler.NewOrderHandler(orderClient)
 	marketHandler := handler.NewMarketHandler(matchingClient)

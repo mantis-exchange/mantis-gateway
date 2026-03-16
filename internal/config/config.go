@@ -9,6 +9,7 @@ type Config struct {
 	OrderServiceAddr   string
 	JWTSecret          string
 	CORSOrigins        string
+	KafkaBrokers       string
 }
 
 // Load reads configuration from environment variables, falling back to defaults.
@@ -19,6 +20,7 @@ func Load() *Config {
 		OrderServiceAddr:   getEnv("ORDER_SERVICE_ADDR", "localhost:50052"),
 		JWTSecret:          getEnv("JWT_SECRET", "changeme"),
 		CORSOrigins:        getEnv("CORS_ORIGINS", "*"),
+		KafkaBrokers:       getEnv("KAFKA_BROKERS", "localhost:9092"),
 	}
 }
 
