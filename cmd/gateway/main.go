@@ -17,17 +17,24 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// Connect to the matching engine via gRPC.
+	// Connect to the matching engine via gRPC (for market data queries).
 	matchingClient, err := grpcclient.New(cfg.MatchingEngineAddr)
 	if err != nil {
 		log.Fatalf("failed to connect to matching engine: %v", err)
 	}
 	defer matchingClient.Close()
 
+	// Connect to the order service via gRPC.
+	orderClient, err := grpcclient.NewOrderClient(cfg.OrderServiceAddr)
+	if err != nil {
+		log.Fatalf("failed to connect to order service: %v", err)
+	}
+	defer orderClient.Close()
+
 	hub := ws.NewHub()
 	go hub.Run()
 
-	orderHandler := handler.NewOrderHandler(matchingClient)
+	orderHandler := handler.NewOrderHandler(orderClient)
 	marketHandler := handler.NewMarketHandler(matchingClient)
 
 	r := gin.Default()
@@ -73,7 +80,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("mantis-gateway starting on :%s (matching-engine: %s)", cfg.Port, cfg.MatchingEngineAddr)
+	log.Printf("mantis-gateway starting on :%s (engine: %s, order-service: %s)", cfg.Port, cfg.MatchingEngineAddr, cfg.OrderServiceAddr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}

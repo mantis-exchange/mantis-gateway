@@ -58,3 +58,43 @@ func (c *Client) CancelOrder(ctx context.Context, req *pb.CancelOrderRequest) (*
 func (c *Client) GetDepth(ctx context.Context, req *pb.GetDepthRequest) (*pb.GetDepthResponse, error) {
 	return c.engine.GetDepth(ctx, req)
 }
+
+// OrderClient wraps the gRPC connection to the order service.
+type OrderClient struct {
+	conn  *grpc.ClientConn
+	order pb.OrderServiceClient
+}
+
+// NewOrderClient creates a new gRPC client connected to the order service.
+func NewOrderClient(addr string) (*OrderClient, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("grpcclient: failed to connect to order service at %s: %w", addr, err)
+	}
+
+	return &OrderClient{
+		conn:  conn,
+		order: pb.NewOrderServiceClient(conn),
+	}, nil
+}
+
+// Close shuts down the gRPC connection to the order service.
+func (c *OrderClient) Close() error {
+	return c.conn.Close()
+}
+
+// PlaceOrder sends a new order to the order service.
+func (c *OrderClient) PlaceOrder(ctx context.Context, req *pb.PlaceOrderRequest) (*pb.PlaceOrderResponse, error) {
+	return c.order.PlaceOrder(ctx, req)
+}
+
+// CancelOrder requests cancellation of an existing order via the order service.
+func (c *OrderClient) CancelOrder(ctx context.Context, req *pb.CancelOrderByUserRequest) (*pb.CancelOrderByUserResponse, error) {
+	return c.order.CancelOrder(ctx, req)
+}

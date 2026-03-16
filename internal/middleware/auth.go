@@ -1,18 +1,18 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
-// Auth returns a Gin middleware that performs JWT authentication.
-//
-// This is a placeholder implementation. It checks that the Authorization header
-// contains a Bearer token and sets a dummy user ID on the context. In production
-// this will validate the JWT signature and claims using the configured secret.
+// Auth returns a Gin middleware that validates JWT tokens using HS256 + shared secret.
 func Auth(jwtSecret string) gin.HandlerFunc {
+	secretBytes := []byte(jwtSecret)
+
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -30,19 +30,44 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		token := parts[1]
-		if token == "" {
+		tokenStr := parts[1]
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "empty token",
 			})
 			return
 		}
 
-		// TODO: Validate JWT signature and claims using jwtSecret.
-		// For now accept any non-empty token and set a placeholder user ID.
-		_ = jwtSecret
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secretBytes, nil
+		})
+		if err != nil || !token.Valid {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid or expired token",
+			})
+			return
+		}
 
-		c.Set("user_id", "user-placeholder-123")
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid token claims",
+			})
+			return
+		}
+
+		sub, ok := claims["sub"].(string)
+		if !ok || sub == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "missing sub claim",
+			})
+			return
+		}
+
+		c.Set("user_id", sub)
 		c.Next()
 	}
 }

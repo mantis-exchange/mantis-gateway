@@ -12,22 +12,22 @@ import (
 
 // OrderHandler holds dependencies for order-related HTTP handlers.
 type OrderHandler struct {
-	matching *grpcclient.Client
+	order *grpcclient.OrderClient
 }
 
-// NewOrderHandler creates a new OrderHandler backed by the given gRPC client.
-func NewOrderHandler(mc *grpcclient.Client) *OrderHandler {
-	return &OrderHandler{matching: mc}
+// NewOrderHandler creates a new OrderHandler backed by the given order service client.
+func NewOrderHandler(oc *grpcclient.OrderClient) *OrderHandler {
+	return &OrderHandler{order: oc}
 }
 
 // PlaceOrderRequest represents a new order submission.
 type PlaceOrderRequest struct {
-	Symbol      string  `json:"symbol" binding:"required"`
-	Side        string  `json:"side" binding:"required,oneof=buy sell"`
-	Type        string  `json:"type" binding:"required,oneof=limit market"`
-	TimeInForce string  `json:"time_in_force"`
-	Price       string  `json:"price"`
-	Qty         string  `json:"qty" binding:"required"`
+	Symbol      string `json:"symbol" binding:"required"`
+	Side        string `json:"side" binding:"required,oneof=buy sell"`
+	Type        string `json:"type" binding:"required,oneof=limit market"`
+	TimeInForce string `json:"time_in_force"`
+	Price       string `json:"price"`
+	Qty         string `json:"qty" binding:"required"`
 }
 
 // PlaceOrder handles POST /api/v1/orders.
@@ -35,6 +35,12 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 	var req PlaceOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user_id"})
 		return
 	}
 
@@ -52,7 +58,8 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 
 	tif := parseTimeInForce(req.TimeInForce)
 
-	resp, err := h.matching.SubmitOrder(c.Request.Context(), &pb.SubmitOrderRequest{
+	resp, err := h.order.PlaceOrder(c.Request.Context(), &pb.PlaceOrderRequest{
+		UserId:      userID,
 		Symbol:      req.Symbol,
 		Side:        side,
 		OrderType:   orderType,
@@ -61,7 +68,7 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		Quantity:    req.Qty,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("matching engine error: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("order service error: %v", err)})
 		return
 	}
 
@@ -79,7 +86,6 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 		"created_at":      order.GetCreatedAt(),
 	}
 
-	// Include any immediate trades (e.g. market orders or crossing limit orders).
 	if len(resp.GetTrades()) > 0 {
 		trades := make([]gin.H, 0, len(resp.GetTrades()))
 		for _, t := range resp.GetTrades() {
@@ -103,19 +109,21 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 
-	// Symbol is required by the matching engine to locate the order book.
-	symbol := c.Query("symbol")
-	if symbol == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol query parameter is required"})
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user_id"})
 		return
 	}
 
-	resp, err := h.matching.CancelOrder(c.Request.Context(), &pb.CancelOrderRequest{
-		Symbol:  symbol,
+	symbol := c.Query("symbol")
+
+	resp, err := h.order.CancelOrder(c.Request.Context(), &pb.CancelOrderByUserRequest{
+		UserId:  userID,
 		OrderId: orderID,
+		Symbol:  symbol,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("matching engine error: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("order service error: %v", err)})
 		return
 	}
 
@@ -126,11 +134,10 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	order := resp.GetOrder()
 	c.JSON(http.StatusOK, gin.H{
-		"order_id":   order.GetId(),
-		"symbol":     order.GetSymbol(),
-		"status":     order.GetStatus().String(),
-		"cancelled":  true,
-		"created_at": order.GetCreatedAt(),
+		"order_id":  order.GetId(),
+		"symbol":    order.GetSymbol(),
+		"status":    order.GetStatus().String(),
+		"cancelled": true,
 	})
 }
 
@@ -168,6 +175,6 @@ func parseTimeInForce(tif string) pb.TimeInForce {
 	case "FOK", "fok":
 		return pb.TimeInForce_TIME_IN_FORCE_FOK
 	default:
-		return pb.TimeInForce_TIME_IN_FORCE_GTC // default to GTC
+		return pb.TimeInForce_TIME_IN_FORCE_GTC
 	}
 }

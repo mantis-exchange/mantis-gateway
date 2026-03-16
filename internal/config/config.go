@@ -6,6 +6,7 @@ import "os"
 type Config struct {
 	Port               string
 	MatchingEngineAddr string
+	OrderServiceAddr   string
 	JWTSecret          string
 	CORSOrigins        string
 }
@@ -15,6 +16,7 @@ func Load() *Config {
 	return &Config{
 		Port:               getEnv("PORT", "8080"),
 		MatchingEngineAddr: getEnv("MATCHING_ENGINE_ADDR", "localhost:9090"),
+		OrderServiceAddr:   getEnv("ORDER_SERVICE_ADDR", "localhost:50052"),
 		JWTSecret:          getEnv("JWT_SECRET", "changeme"),
 		CORSOrigins:        getEnv("CORS_ORIGINS", "*"),
 	}
