@@ -31,13 +31,14 @@ type tradeMessage struct {
 type TradeConsumer struct {
 	hub      *ws.Hub
 	matching *grpcclient.Client
+	order    *grpcclient.OrderClient
 	brokers  string
 }
 
 // NewTradeConsumer creates a new consumer that bridges Kafka trade events to the
 // WebSocket hub.
-func NewTradeConsumer(hub *ws.Hub, matching *grpcclient.Client, brokers string) *TradeConsumer {
-	return &TradeConsumer{hub: hub, matching: matching, brokers: brokers}
+func NewTradeConsumer(hub *ws.Hub, matching *grpcclient.Client, order *grpcclient.OrderClient, brokers string) *TradeConsumer {
+	return &TradeConsumer{hub: hub, matching: matching, order: order, brokers: brokers}
 }
 
 // Start begins consuming trade messages. It blocks forever and should be called

@@ -103,3 +103,8 @@ func (c *OrderClient) CancelOrder(ctx context.Context, req *pb.CancelOrderByUser
 func (c *OrderClient) ListOrders(ctx context.Context, req *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
 	return c.order.ListOrders(ctx, req)
 }
+
+// GetOrder retrieves a single order by ID from the order service.
+func (c *OrderClient) GetOrder(ctx context.Context, req *pb.GetOrderRequest) (*pb.GetOrderResponse, error) {
+	return c.order.GetOrder(ctx, req)
+}

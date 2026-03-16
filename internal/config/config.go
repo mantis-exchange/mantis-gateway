@@ -10,6 +10,8 @@ type Config struct {
 	JWTSecret          string
 	CORSOrigins        string
 	KafkaBrokers       string
+	MarketDataAddr     string
+	AccountServiceAddr string
 }
 
 // Load reads configuration from environment variables, falling back to defaults.
@@ -21,6 +23,8 @@ func Load() *Config {
 		JWTSecret:          getEnv("JWT_SECRET", "changeme"),
 		CORSOrigins:        getEnv("CORS_ORIGINS", "*"),
 		KafkaBrokers:       getEnv("KAFKA_BROKERS", "localhost:9092"),
+		MarketDataAddr:     getEnv("MARKET_DATA_ADDR", "http://localhost:8081"),
+		AccountServiceAddr: getEnv("ACCOUNT_SERVICE_ADDR", "http://localhost:50053"),
 	}
 }
 

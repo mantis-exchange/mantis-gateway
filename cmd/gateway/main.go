@@ -37,11 +37,11 @@ func main() {
 	go hub.Run()
 
 	// Start WebSocket trade consumer for real-time broadcasting.
-	tc := consumer.NewTradeConsumer(hub, matchingClient, cfg.KafkaBrokers)
+	tc := consumer.NewTradeConsumer(hub, matchingClient, orderClient, cfg.KafkaBrokers)
 	go tc.Start()
 
 	orderHandler := handler.NewOrderHandler(orderClient)
-	marketHandler := handler.NewMarketHandler(matchingClient)
+	marketHandler := handler.NewMarketHandler(matchingClient, cfg.MarketDataAddr)
 
 	r := gin.Default()
 
@@ -53,10 +53,16 @@ func main() {
 	limiter := middleware.NewRateLimiter(100, 100)
 	r.Use(limiter.Middleware())
 
+	// Metrics middleware
+	r.Use(middleware.Metrics())
+
 	// Health check.
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Metrics endpoint
+	r.GET("/metrics", middleware.MetricsHandler())
 
 	// WebSocket endpoint (no auth required for market data; optional JWT for private channels).
 	r.GET("/ws", hub.HandleWS(cfg.JWTSecret))
@@ -65,12 +71,12 @@ func main() {
 	public := r.Group("/api/v1")
 	{
 		public.GET("/depth/:symbol", marketHandler.GetDepth)
-		public.GET("/trades/:symbol", handler.GetTrades)
+		public.GET("/trades/:symbol", marketHandler.GetTrades)
 	}
 
 	// Authenticated API routes.
 	auth := r.Group("/api/v1")
-	auth.Use(middleware.Auth(cfg.JWTSecret))
+	auth.Use(middleware.Auth(cfg.JWTSecret, cfg.AccountServiceAddr))
 	{
 		auth.POST("/orders", orderHandler.PlaceOrder)
 		auth.DELETE("/orders/:id", orderHandler.CancelOrder)

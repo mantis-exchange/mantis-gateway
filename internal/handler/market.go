@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -13,12 +14,13 @@ import (
 
 // MarketHandler holds dependencies for market-data HTTP handlers.
 type MarketHandler struct {
-	matching *grpcclient.Client
+	matching       *grpcclient.Client
+	marketDataAddr string
 }
 
 // NewMarketHandler creates a new MarketHandler backed by the given gRPC client.
-func NewMarketHandler(mc *grpcclient.Client) *MarketHandler {
-	return &MarketHandler{matching: mc}
+func NewMarketHandler(mc *grpcclient.Client, marketDataAddr string) *MarketHandler {
+	return &MarketHandler{matching: mc, marketDataAddr: marketDataAddr}
 }
 
 // GetDepth handles GET /api/v1/depth/:symbol.
@@ -65,22 +67,24 @@ func (h *MarketHandler) GetDepth(c *gin.Context) {
 	})
 }
 
-// GetTrades handles GET /api/v1/trades/:symbol.
-// Placeholder: returns mock recent trades. Will query matching engine via gRPC.
-func GetTrades(c *gin.Context) {
+// GetTrades handles GET /api/v1/trades/:symbol by proxying to the market-data service.
+func (h *MarketHandler) GetTrades(c *gin.Context) {
 	symbol := c.Param("symbol")
 	if symbol == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol is required"})
 		return
 	}
 
-	// TODO: Fetch real trades from matching engine.
-	c.JSON(http.StatusOK, gin.H{
-		"symbol": symbol,
-		"trades": []gin.H{
-			{"id": "t1", "price": "50000.50", "qty": "0.1", "side": "buy", "time": 1700000000000},
-			{"id": "t2", "price": "50000.00", "qty": "0.5", "side": "sell", "time": 1700000001000},
-			{"id": "t3", "price": "50001.00", "qty": "0.25", "side": "buy", "time": 1700000002000},
-		},
-	})
+	limit := c.DefaultQuery("limit", "50")
+	url := fmt.Sprintf("%s/api/v1/trades?symbol=%s&limit=%s", h.marketDataAddr, symbol, limit)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "market data service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", body)
 }
