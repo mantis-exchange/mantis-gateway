@@ -85,6 +85,33 @@ func (h *MarketHandler) GetKlines(c *gin.Context) {
 	c.Data(resp.StatusCode, "application/json", body)
 }
 
+// GetSymbols handles GET /api/v1/symbols.
+func (h *MarketHandler) GetSymbols(c *gin.Context) {
+	symbols := []gin.H{
+		{"symbol": "BTC-USDT", "base": "BTC", "quote": "USDT", "price": "65000"},
+		{"symbol": "ETH-USDT", "base": "ETH", "quote": "USDT", "price": "3500"},
+		{"symbol": "SOL-USDT", "base": "SOL", "quote": "USDT", "price": "150"},
+		{"symbol": "BNB-USDT", "base": "BNB", "quote": "USDT", "price": "600"},
+		{"symbol": "XRP-USDT", "base": "XRP", "quote": "USDT", "price": "0.55"},
+		{"symbol": "ADA-USDT", "base": "ADA", "quote": "USDT", "price": "0.45"},
+		{"symbol": "DOGE-USDT", "base": "DOGE", "quote": "USDT", "price": "0.15"},
+		{"symbol": "DOT-USDT", "base": "DOT", "quote": "USDT", "price": "7.5"},
+		{"symbol": "AVAX-USDT", "base": "AVAX", "quote": "USDT", "price": "35"},
+		{"symbol": "LINK-USDT", "base": "LINK", "quote": "USDT", "price": "15"},
+		{"symbol": "MATIC-USDT", "base": "MATIC", "quote": "USDT", "price": "0.70"},
+		{"symbol": "UNI-USDT", "base": "UNI", "quote": "USDT", "price": "10"},
+		{"symbol": "ATOM-USDT", "base": "ATOM", "quote": "USDT", "price": "9"},
+		{"symbol": "LTC-USDT", "base": "LTC", "quote": "USDT", "price": "85"},
+		{"symbol": "FIL-USDT", "base": "FIL", "quote": "USDT", "price": "5.5"},
+		{"symbol": "APT-USDT", "base": "APT", "quote": "USDT", "price": "9.5"},
+		{"symbol": "ARB-USDT", "base": "ARB", "quote": "USDT", "price": "1.1"},
+		{"symbol": "OP-USDT", "base": "OP", "quote": "USDT", "price": "2.5"},
+		{"symbol": "NEAR-USDT", "base": "NEAR", "quote": "USDT", "price": "5"},
+		{"symbol": "QFC-USDT", "base": "QFC", "quote": "USDT", "price": "1.5"},
+	}
+	c.JSON(http.StatusOK, gin.H{"symbols": symbols})
+}
+
 // GetTrades handles GET /api/v1/trades/:symbol by proxying to the market-data service.
 func (h *MarketHandler) GetTrades(c *gin.Context) {
 	symbol := c.Param("symbol")
