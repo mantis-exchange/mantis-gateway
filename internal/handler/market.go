@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,28 +88,76 @@ func (h *MarketHandler) GetKlines(c *gin.Context) {
 
 // GetSymbols handles GET /api/v1/symbols.
 func (h *MarketHandler) GetSymbols(c *gin.Context) {
-	symbols := []gin.H{
-		{"symbol": "BTC-USDT", "base": "BTC", "quote": "USDT", "price": "65000"},
-		{"symbol": "ETH-USDT", "base": "ETH", "quote": "USDT", "price": "3500"},
-		{"symbol": "SOL-USDT", "base": "SOL", "quote": "USDT", "price": "150"},
-		{"symbol": "BNB-USDT", "base": "BNB", "quote": "USDT", "price": "600"},
-		{"symbol": "XRP-USDT", "base": "XRP", "quote": "USDT", "price": "0.55"},
-		{"symbol": "ADA-USDT", "base": "ADA", "quote": "USDT", "price": "0.45"},
-		{"symbol": "DOGE-USDT", "base": "DOGE", "quote": "USDT", "price": "0.15"},
-		{"symbol": "DOT-USDT", "base": "DOT", "quote": "USDT", "price": "7.5"},
-		{"symbol": "AVAX-USDT", "base": "AVAX", "quote": "USDT", "price": "35"},
-		{"symbol": "LINK-USDT", "base": "LINK", "quote": "USDT", "price": "15"},
-		{"symbol": "MATIC-USDT", "base": "MATIC", "quote": "USDT", "price": "0.70"},
-		{"symbol": "UNI-USDT", "base": "UNI", "quote": "USDT", "price": "10"},
-		{"symbol": "ATOM-USDT", "base": "ATOM", "quote": "USDT", "price": "9"},
-		{"symbol": "LTC-USDT", "base": "LTC", "quote": "USDT", "price": "85"},
-		{"symbol": "FIL-USDT", "base": "FIL", "quote": "USDT", "price": "5.5"},
-		{"symbol": "APT-USDT", "base": "APT", "quote": "USDT", "price": "9.5"},
-		{"symbol": "ARB-USDT", "base": "ARB", "quote": "USDT", "price": "1.1"},
-		{"symbol": "OP-USDT", "base": "OP", "quote": "USDT", "price": "2.5"},
-		{"symbol": "NEAR-USDT", "base": "NEAR", "quote": "USDT", "price": "5"},
-		{"symbol": "QFC-USDT", "base": "QFC", "quote": "USDT", "price": "1.5"},
+	// Static metadata for all supported trading pairs
+	meta := map[string][2]string{
+		"BTC-USDT":   {"BTC", "USDT"},
+		"ETH-USDT":   {"ETH", "USDT"},
+		"SOL-USDT":   {"SOL", "USDT"},
+		"BNB-USDT":   {"BNB", "USDT"},
+		"XRP-USDT":   {"XRP", "USDT"},
+		"ADA-USDT":   {"ADA", "USDT"},
+		"DOGE-USDT":  {"DOGE", "USDT"},
+		"DOT-USDT":   {"DOT", "USDT"},
+		"AVAX-USDT":  {"AVAX", "USDT"},
+		"LINK-USDT":  {"LINK", "USDT"},
+		"MATIC-USDT": {"MATIC", "USDT"},
+		"UNI-USDT":   {"UNI", "USDT"},
+		"ATOM-USDT":  {"ATOM", "USDT"},
+		"LTC-USDT":   {"LTC", "USDT"},
+		"FIL-USDT":   {"FIL", "USDT"},
+		"APT-USDT":   {"APT", "USDT"},
+		"ARB-USDT":   {"ARB", "USDT"},
+		"OP-USDT":    {"OP", "USDT"},
+		"NEAR-USDT":  {"NEAR", "USDT"},
+		"QFC-USDT":   {"QFC", "USDT"},
 	}
+
+	// Fetch live ticker data from market-data service
+	type ticker struct {
+		Symbol    string `json:"symbol"`
+		LastPrice string `json:"last_price"`
+		High24h   string `json:"high_24h"`
+		Low24h    string `json:"low_24h"`
+		Volume24h string `json:"volume_24h"`
+		Change24h string `json:"change_24h"`
+	}
+
+	tickerMap := make(map[string]ticker)
+	resp, err := http.Get(h.marketDataAddr + "/api/v1/tickers")
+	if err == nil && resp.StatusCode == 200 {
+		defer resp.Body.Close()
+		var result struct {
+			Tickers []ticker `json:"tickers"`
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if json.Unmarshal(body, &result) == nil {
+			for _, t := range result.Tickers {
+				tickerMap[t.Symbol] = t
+			}
+		}
+	}
+
+	symbols := make([]gin.H, 0, len(meta))
+	for sym, bq := range meta {
+		entry := gin.H{
+			"symbol": sym,
+			"base":   bq[0],
+			"quote":  bq[1],
+		}
+		if t, ok := tickerMap[sym]; ok {
+			entry["price"] = t.LastPrice
+			entry["change_24h"] = t.Change24h
+			entry["high_24h"] = t.High24h
+			entry["low_24h"] = t.Low24h
+			entry["volume_24h"] = t.Volume24h
+		} else {
+			entry["price"] = "0"
+			entry["change_24h"] = "0.00"
+			entry["volume_24h"] = "0"
+		}
+		symbols = append(symbols, entry)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"symbols": symbols})
 }
 
