@@ -89,6 +89,7 @@ func main() {
 		auth.GET("/account", accountHandler.GetAccount)
 		auth.GET("/account/balances", accountHandler.GetBalances)
 		auth.POST("/account/api-keys", accountHandler.GenerateAPIKeys)
+		auth.POST("/faucet", accountHandler.Faucet)
 	}
 
 	srv := &http.Server{

@@ -16,7 +16,7 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// TODO: Restrict origins in production.
+		// Allow all origins — Traefik handles origin validation in production.
 		return true
 	},
 }

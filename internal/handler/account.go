@@ -46,6 +46,11 @@ func (h *AccountHandler) GenerateAPIKeys(c *gin.Context) {
 	h.proxy(c, "POST", "/api/v1/account/api-keys")
 }
 
+// Faucet handles POST /api/v1/faucet.
+func (h *AccountHandler) Faucet(c *gin.Context) {
+	h.proxy(c, "POST", "/api/v1/faucet")
+}
+
 func (h *AccountHandler) proxy(c *gin.Context, method, path string) {
 	url := h.accountAddr + path
 
